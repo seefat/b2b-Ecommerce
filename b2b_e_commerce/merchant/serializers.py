@@ -67,6 +67,7 @@ class MerchantSerializer(serializers.Serializer):
 class CategorySerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     title = serializers.CharField()
+    slug = serializers.SlugField(read_only=True)
 
     def create(self, validated_data):
         return Category.objects.create(**validated_data)
@@ -89,6 +90,7 @@ class CategorySerializer(serializers.Serializer):
 class ShopSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only = True)
     name = serializers.CharField()
+    slug = serializers.SlugField(read_only=True)
     merchant = serializers.CharField(read_only=True)
     user = serializers.HiddenField(default=serializers.CurrentUserDefault())
     category = CategorySerializer(read_only=True)
@@ -131,6 +133,7 @@ class MyShopDetailSerializer(serializers.Serializer):
 
     id = serializers.IntegerField()
     name = serializers.CharField()
+    slug = serializers.SlugField(read_only=True)
     merchant = MerchantSerializer()
     category = CategorySerializer()
     address = serializers.CharField()
@@ -143,6 +146,7 @@ class ConnectionRequestSerializer(serializers.Serializer):
     # sender_shop = ShopSerializer(read_only=True)
     receiver_shop_id = serializers.IntegerField(write_only=True)
     receiver_shop = ShopSerializer(read_only=True)
+    slug = serializers.SlugField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     status = serializers.CharField(read_only=True)
 
@@ -167,6 +171,7 @@ class ConnectionResponseSerializer(serializers.Serializer):
     # receiver_shop_id = serializers.IntegerField(write_only=True)
     # receiver_shop = ShopSerializer(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
+    slug = serializers.SlugField(read_only=True)
     status = serializers.CharField()
 
     def update(self, instance, validated_data):

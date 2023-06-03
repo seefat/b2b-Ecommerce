@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.shortcuts import get_object_or_404
 from .models import *
+from rest_framework.exceptions import ValidationError
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from drf_spectacular.utils import extend_schema
@@ -123,11 +124,11 @@ class MyShopSerializerView(APIView):
 
 
 class MyActiveShopSerializerView(APIView):
-    def get(self, request, shop_id):
+    def get(self, request, shop_slug):
         merchant = request.user.merchant
         my_shops = Shop.objects.filter(merchant=merchant)
         my_shops.update(active=False)   # Deactivating all the merchant's shops
-        shop = Shop.objects.get(id=shop_id)
+        shop = Shop.objects.get(slug=shop_slug)
         shop.active=True    #activating my specific shop
         serializer = MyShopDetailSerializer(shop)
         return Response(serializer.data)
@@ -172,16 +173,9 @@ class ConnectionRequestCreateView(APIView):
         responses={201: ShopSerializer}, # Serializer used for the response body
     )
 
-    def get(self, request, shop_id):
-        # merchant = request.user.merchant
-        # my_shops = Shop.objects.filter(merchant=merchant)
-        # my_shops.update(active=False)   # Deactivating all the merchant's shops
-        # shop = Shop.objects.get(id=shop_id)
-        # shop.active=True
-        # shop.save()
-        # sender_shop = Shop.objects.filter(merchant=merchant,active=True,)
-        # sender_shop = ShopConnection.objects.get(sender_shop_id=shop_id)
-        sender_shop = get_object_or_404(Shop, id=shop_id)
+    def get(self, request, shop_slug):
+        
+        sender_shop = get_object_or_404(Shop, slug=shop_slug)
         sender_shop.active=True
         sender_shop.save()
         query = ShopConnection.objects.filter(sender_shop=sender_shop) #.values_list('receiver_shop', flat=True)
@@ -189,22 +183,24 @@ class ConnectionRequestCreateView(APIView):
         serializer = ConnectionRequestSerializer(query, many=True)
         return Response(serializer.data)
 
-    def post(self, request, shop_id):
+    def post(self, request, shop_slug):
         serializer = ConnectionRequestSerializer(data=request.data)
         if serializer.is_valid():
             receiver_shop_id = serializer.validated_data.get('receiver_shop_id')
-            sender_shop = get_object_or_404(Shop, id=shop_id)
+            sender_shop = get_object_or_404(Shop, slug=shop_slug)
             # status = serializer.validated_data.get('status')
             receiver_shop = Shop.objects.get(id=receiver_shop_id)
+            if sender_shop.category==receiver_shop.category:
+                connection = ShopConnection.objects.create(
+                    sender_shop=sender_shop,
+                    receiver_shop=receiver_shop,
+                    status='pending'
+                )
 
-            connection = ShopConnection.objects.create(
-                sender_shop=sender_shop,
-                receiver_shop=receiver_shop,
-                status='pending'
-            )
-
-            res = ConnectionRequestSerializer(connection)
-            return Response(res.data, status=status.HTTP_201_CREATED)
+                res = ConnectionRequestSerializer(connection)
+                return Response(res.data, status=status.HTTP_201_CREATED)
+            else:
+                raise ValidationError('You are not in the same category.')
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -216,9 +212,9 @@ class ConnectionReceivedView(APIView):
         responses={201: ShopSerializer}, # Serializer used for the response body
     )
 
-    def get(self, request, shop_id):
+    def get(self, request, shop_slug):
 
-        receiver_shop = get_object_or_404(Shop, id=shop_id)
+        receiver_shop = get_object_or_404(Shop, slug=shop_slug)
         receiver_shop.active=True
         receiver_shop.save()
         query = ShopConnection.objects.filter(receiver_shop=receiver_shop) #.values_list('receiver_shop', flat=True)
@@ -253,22 +249,22 @@ class ConnectionResponseView(APIView):
         responses={201: ShopSerializer}, # Serializer used for the response body
     )
 
-    def get(self, request, shop_id, shopconnection_id):
+    def get(self, request, shop_slug, shopconnection_slug):
 
-        receiver_shop = get_object_or_404(Shop, id=shop_id)
+        receiver_shop = get_object_or_404(Shop, slug=shop_slug)
         receiver_shop.active=True
         receiver_shop.save()
-        query = ShopConnection.objects.filter(id=shopconnection_id) #.values_list('receiver_shop', flat=True)
+        query = ShopConnection.objects.filter(slug=shopconnection_slug) #.values_list('receiver_shop', flat=True)
 
         serializer = ConnectionResponseSerializer(query, many=True)
         return Response(serializer.data)
 
-    def patch(self, request, shop_id, shopconnection_id):
-        receiver_shop = get_object_or_404(Shop, id=shop_id)
+    def patch(self, request, shop_slug, shopconnection_slug):
+        receiver_shop = get_object_or_404(Shop, slug=shop_slug)
         receiver_shop.active = True
         receiver_shop.save()
 
-        shop_connection = get_object_or_404(ShopConnection, id=shopconnection_id, receiver_shop=receiver_shop)
+        shop_connection = get_object_or_404(ShopConnection, slug=shopconnection_slug, receiver_shop=receiver_shop)
 
         serializer = ConnectionResponseSerializer(shop_connection, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)

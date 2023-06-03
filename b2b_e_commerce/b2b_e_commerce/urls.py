@@ -13,7 +13,7 @@ from django.conf import settings
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
-    path('merchant/',include('merchant.urls')),
+    path('b2b/',include('merchant.urls')),
     path('api/schema/',SpectacularAPIView.as_view(), name = 'api-schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name = 'api-schema'), name = 'api-docs'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
