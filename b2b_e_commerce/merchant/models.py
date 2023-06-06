@@ -9,11 +9,11 @@ import uuid
 import os
 from django.utils.text import slugify
 
-def product_image_file_path(instance, filename):
-    ext = os.path.splitext(filename)[1]
-    filename = f'{uuid.uuid4()}{ext}'
+# def product_image_file_path(instance, filename):
+#     ext = os.path.splitext(filename)[1]
+#     filename = f'{uuid.uuid4()}{ext}'
 
-    return os.path.join('upload','products',filename)
+#     return os.path.join('upload','products',filename)
 
 
 class UserManeger(BaseUserManager):
@@ -60,7 +60,7 @@ class Merchant(models.Model):
 
 class Category(models.Model):
     title = models.CharField(max_length=50)
-    slug = models.SlugField(max_length=50, unique=True, blank=True)
+    slug = models.SlugField(max_length=50, unique=True)
 
     class Meta:
         verbose_name_plural = 'Categories'
@@ -70,7 +70,7 @@ class Category(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.title)
+            self.slug = slugify(self.title.replace(" ", "-"))
         super().save(*args, **kwargs)
 
 
@@ -89,10 +89,12 @@ class Shop(models.Model):
         verbose_name_plural = 'Shops'
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
+            self.slug = slugify(self.name.replace(" ", "-"))
         super().save(*args, **kwargs)
     def __str__(self):
         return self.name
+
+
 class ShopConnection(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -114,13 +116,15 @@ class ShopConnection(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(f'{self.sender_shop}{self.receiver_shop}')
+            self.slug = slugify(f'{self.sender_shop}-{self.receiver_shop}'.replace(" ", "-"))
         super().save(*args, **kwargs)
 
 class Product(models.Model):
     title = models.CharField(max_length=50)
-    slug = models.SlugField(max_length=50, unique=True, blank=True)
+    price = models.DecimalField(max_digits=8, decimal_places=2, default=200)
     shop = models.ForeignKey(Shop, on_delete=models.CASCADE)
+    quantity = models.IntegerField(default=10)
+    slug = models.SlugField(max_length=50, unique=True, blank=True)
     # image = models.ImageField(null=True, upload_to=product_image_file_path)
     class Meta:
         verbose_name_plural = 'Products'
@@ -129,5 +133,14 @@ class Product(models.Model):
         return self.title
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.title)
+            self.slug = slugify(self.title.replace(" ", "-"))
         super().save(*args, **kwargs)
+
+class Cart(models.Model):
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE)
+    products = models.ManyToManyField(Product, through='CartItem')
+
+class CartItem(models.Model):
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.IntegerField(default=1)

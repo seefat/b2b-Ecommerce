@@ -179,26 +179,38 @@ class ConnectionResponseSerializer(serializers.Serializer):
         instance.status = status
         instance.save()
         return instance
-# class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-#     email = serializers.EmailField()
-#     password = serializers.CharField(
-#         style={'input_type': 'password'},
-#         trim_whitespace=False
-#     )
 
-#     def validate(self, attrs):
-#         email = attrs.get('email')
-#         password = attrs.get('password')
+class ProductSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    title = serializers.CharField()
+    price = serializers.DecimalField(max_digits=8, decimal_places=2, default=200)
+    quantity = serializers.IntegerField()
+    slug = serializers.SlugField(read_only=True)
+    shop = ShopSerializer(read_only=True)
+    def create(self, validated_data):
 
-#         user = authenticate(
-#             request=self.context.get('request'),
-#             username=email,
-#             password=password,
-#         )
+        return Product.objects.create(**validated_data)
 
-#         if not user:
-#             msg = _('Unable to authenticate with the credentials')
-#             raise serializers.ValidationError(msg, code='authorization')
+class BuyProductSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField(read_only=True)
+    price = serializers.DecimalField(max_digits=8, decimal_places=2, read_only=True)
+    quantity = serializers.IntegerField()
+    # slug = serializers.SlugField(read_only=True)
+    # def create(self,validated_data):
+class CartItemSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source='product.title')
+    price = serializers.DecimalField(source='product.price', max_digits=8, decimal_places=2)
 
-#         attrs['user'] = user
-#         return attrs
+    class Meta:
+        model = Product
+        fields = ['id', 'title', 'price', 'quantity']
+        
+
+
+class CartSerializer(serializers.ModelSerializer):
+    items = CartItemSerializer(many=True, source='cart', read_only=True)
+
+    class Meta:
+        model = Shop
+        fields = ['id', 'items']

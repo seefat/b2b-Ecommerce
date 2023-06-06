@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.shortcuts import get_object_or_404
 from .models import *
+from rest_framework.generics import RetrieveAPIView
 from rest_framework.exceptions import ValidationError
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
@@ -102,12 +103,7 @@ class MyShopSerializerView(APIView):
         request=ShopSerializer,
         responses={201: ShopSerializer},
     )
-    # def post(self,request):
-    #     serializer = ShopSerializer(data=request.data,context={'request': request})
-    #     if serializer.is_valid():
-    #         shop = serializer.save()
-    #         return Response(serializer.data, status.HTTP_201_CREATED)
-    #     return Response(serializer.errors,status.HTTP_400_BAD_REQUEST)
+
     def post(self, request):
         merchant = request.user.merchant
         my_shops = Shop.objects.filter(merchant=merchant)
@@ -174,7 +170,7 @@ class ConnectionRequestCreateView(APIView):
     )
 
     def get(self, request, shop_slug):
-        
+
         sender_shop = get_object_or_404(Shop, slug=shop_slug)
         sender_shop.active=True
         sender_shop.save()
@@ -246,7 +242,7 @@ class ConnectionResponseView(APIView):
     permission_classes = [IsAuthenticated]
     @extend_schema(
         request=ConnectionResponseSerializer, # Serializer used for the request body
-        responses={201: ShopSerializer}, # Serializer used for the response body
+        responses={201: ConnectionResponseSerializer}, # Serializer used for the response body
     )
 
     def get(self, request, shop_slug, shopconnection_slug):
@@ -271,11 +267,9 @@ class ConnectionResponseView(APIView):
         if serializer.validated_data.get('status') == 'approved':
             sender_shop = shop_connection.sender_shop
 
-            # Create a new connection with reversed sender and receiver
             ShopConnection.objects.create(sender_shop=receiver_shop, receiver_shop=sender_shop, status='approved')
 
         elif serializer.validated_data.get('status') == 'declined':
-            # Delete the connection
             shop_connection.delete()
         serializer.save()
 
@@ -301,3 +295,100 @@ class CategoryCreateView(APIView):
             category = serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MyProductView(APIView):
+    def get(self, request, shop_slug):
+        # all_shops = Shop.objects.filter()
+        # all_shops.update(active=False)
+        active_shop = Shop.objects.get(slug=shop_slug)
+        active_shop.active = True
+        active_shop.save()
+
+        my_products = Product.objects.filter(shop=active_shop)
+        serializer = ProductSerializer(my_products, many=True)
+        return Response(serializer.data)
+
+    def post(self,request, shop_slug):
+        # merchant = request.user.merchant
+
+        all_shop = Shop.objects.all().update(active=False)
+        print(all_shop)
+        active_shop = Shop.objects.get(slug=shop_slug)
+        active_shop.active = True
+        active_shop.save()
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            shop = get_object_or_404(Shop, active=True)
+
+            product = serializer.save(shop=shop)
+            product_serializer = ProductSerializer(product)
+            return Response(product_serializer.data, status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class SameCategoryShop(APIView):
+    def get(self,request,shop_slug):
+        current_shop = get_object_or_404(Shop, slug=shop_slug)
+        same_category_shops = Shop.objects.filter(category=current_shop.category)
+
+        res = ShopSerializer(same_category_shops, many=True)
+        return Response(res.data,status.HTTP_200_OK)
+
+class ConnectedShops(APIView):
+    def get(self, request, shop_slug):
+        active_shop = get_object_or_404(Shop, slug=shop_slug)
+        sender_shops = active_shop.sent_connections.filter(status='approved').values_list('receiver_shop', flat=True)
+        connected_shops = Shop.objects.filter(pk__in=sender_shops)
+        serializer = ShopSerializer(connected_shops, many=True)
+        return Response(serializer.data)
+
+class BuyProducts(APIView):
+    def get(self, request, shop_slug):
+        active_shop = get_object_or_404(Shop, slug=shop_slug)
+        sender_shops = active_shop.sent_connections.filter(status='approved').values_list('receiver_shop', flat=True)
+        connected_shops = Shop.objects.filter(pk__in=sender_shops)
+        products = Product.objects.filter(shop__in=connected_shops)
+        serializer = ProductSerializer(products,many=True)
+        return Response(serializer.data)
+
+    def post(self, request, shop_slug):
+        active_shop = get_object_or_404(Shop, slug=shop_slug)
+        sender_shops = active_shop.sent_connections.filter(status='approved').values_list('receiver_shop', flat=True)
+        connected_shops = Shop.objects.filter(pk__in=sender_shops)
+
+        product_serializer = BuyProductSerializer(data=request.data)
+        if product_serializer.is_valid():
+            product_id = product_serializer.validated_data['id']
+            quantity = product_serializer.validated_data['quantity']
+
+            # Get the product and check if it belongs to any connected shop
+            product = get_object_or_404(Product, id=product_id, shop__in=connected_shops)
+
+            # Get or create the cart for the active shop
+            cart, _ = Cart.objects.get_or_create(shop=active_shop)
+
+            # Check if the product is already in the cart
+            cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product)
+            if not created:
+                # If the product already exists in the cart, update the quantity
+                cart_item.quantity += quantity
+                cart_item.save()
+
+            return Response(product_serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(product_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+# class CartItems(RetrieveAPIView):
+#     queryset = Shop.objects.all()
+#     serializer_class = CartSerializer
+#     lookup_field = 'slug'
+#     lookup_url_kwarg = 'shop_slug'
+
+class CartItems(APIView):
+    def get(self, request, shop_slug):
+        active_shop = get_object_or_404(Shop, slug=shop_slug)
+        # cart = cart.shop_set(active_shop)
+        cart = Cart.objects.get(shop=active_shop)
+        cart_items = cart.cartitem_set.all()
+        serializer = CartItemSerializer(cart_items, many=True)
+
+        return Response(serializer.data)
